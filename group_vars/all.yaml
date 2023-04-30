@@ -1,0 +1,4 @@
+---
+FIRST_HOST_MONITOR: "192.168.2.210"
+CEPH_USER: "rbdkube"
+POOL_NAME: "kube"

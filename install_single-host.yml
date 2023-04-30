@@ -1,0 +1,66 @@
+---
+- name: Ceph cluster to run on a single host
+  hosts: cephmonitor
+  pre_tasks:
+    - name: Save the contents of /etc/os-release
+      command: cat /etc/os-release
+      register: os_release
+      changed_when: False
+    - name: Detect Linux Servers
+      debug:
+        msg: "Find on CentOS|Fedora..."
+      when: os_release.stdout.find('CentOS') != -1 or os_release.stdout.find('Fedora') != -1
+      changed_when: False
+    - name: Detect Linux Servers
+      debug:
+        msg: "Find on Debian|Ubuntu..."
+      when: os_release.stdout.find('debian') != -1 or os_release.stdout.find('Ubuntu') != -1
+      changed_when: False
+  tasks:
+    - name: Install cephadm
+      become: true
+      ansible.builtin.package:
+        name: cephadm
+        state: present
+    - name: Install ceph-common
+      become: true
+      ansible.builtin.shell:  cephadm add-repo --release quincy && cephadm install ceph-common
+    - name: Bootstrap new single-host cluster
+      become: true
+      ansible.builtin.shell: cephadm bootstrap --mon-ip {{ FIRST_HOST_MONITOR }} --single-host-defaults
+    - name: Deploy OSDs
+      become: true
+      ansible.builtin.shell: ceph orch apply osd --all-available-devices
+    - name: Create pool for kube
+      become: true
+      ansible.builtin.shell: ceph osd pool create {{ POOL_NAME }} 32
+    - name: Enable rbd in pool
+      become: true
+      ansible.builtin.shell: ceph osd pool application enable {{ POOL_NAME }} rbd
+    - name: Create {{ CEPH_USER }}
+      become: true
+      ansible.builtin.shell: ceph auth get-or-create client.{{ CEPH_USER }} mon 'profile rbd' osd 'profile rbd pool=kube'
+    - name: Get key {{ CEPH_USER }}
+      become: true
+      ansible.builtin.shell: ceph auth get-key client.{{ CEPH_USER }}
+      register: ceph_userkey_id
+      changed_when: False
+    - name: catch ceph fsid
+      become: true
+      ansible.builtin.shell: ceph fsid
+      register: ceph_cluster_id
+      changed_when: False
+    - name: catch ceph mon IP
+      become: true
+      ansible.builtin.shell: ceph mon dump
+      register: ceph_cluster_ip
+      changed_when: False
+    - name: Print ceph fsid
+      debug:
+        msg: ceph_cluster_id   
+    - name: Print ceph IP
+      debug:
+        msg: ceph_cluster_ip
+    - name: Print key {{ CEPH_USER }}
+      debug:
+        msg: ceph_userkey_id
